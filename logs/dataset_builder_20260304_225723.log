@@ -1,0 +1,18 @@
+2026-03-04 22:57:23,905 - __main__ - INFO - ============================================================
+2026-03-04 22:57:23,905 - __main__ - INFO - Running FULL pipeline
+2026-03-04 22:57:23,905 - __main__ - INFO - ============================================================
+2026-03-04 22:57:23,905 - __main__ - INFO - 
+[1/3] Downloading malware samples...
+2026-03-04 22:57:23,905 - __main__ - INFO - ============================================================
+2026-03-04 22:57:23,905 - __main__ - INFO - Starting malware download phase
+2026-03-04 22:57:23,905 - __main__ - INFO - ============================================================
+2026-03-04 22:57:23,906 - src.database - INFO - Database initialized at data/dataset.db
+2026-03-04 22:57:23,907 - src.malware_downloader - INFO - 
+==================================================
+2026-03-04 22:57:23,907 - src.malware_downloader - INFO - Processing family: rat
+2026-03-04 22:57:23,907 - src.malware_downloader - INFO - Collecting 10000 samples for family: rat
+2026-03-04 22:57:23,907 - src.malware_downloader - INFO - Querying signature: njRAT
+2026-03-04 22:57:43,563 - src.malware_downloader - INFO - Downloaded 1/10000: 620d61e4b15a0c4f3e8f31855cbcc94ca02601e899145bc48c65610e2e4ba0ad
+2026-03-04 22:57:44,800 - src.malware_downloader - INFO - Downloaded 2/10000: 1f8a2fd2b7fbdf3a65fe5bb1718f64f61f8110b512ea76f1bdd050dd44a1cffc
+2026-03-04 22:57:46,057 - src.malware_downloader - INFO - Downloaded 3/10000: 6ef077339d502b2c4c5fbf6c06a3a512f55f95f42cbbcfcc7620ae47efae7f93
+2026-03-04 22:57:48,280 - src.malware_downloader - INFO - Downloaded 4/10000: e600465e10f9ae577b1400ec378ec1a287303f5954f98b35602220fd173f9735

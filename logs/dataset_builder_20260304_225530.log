@@ -1,0 +1,14 @@
+2026-03-04 22:55:30,234 - __main__ - INFO - ============================================================
+2026-03-04 22:55:30,234 - __main__ - INFO - Running FULL pipeline
+2026-03-04 22:55:30,234 - __main__ - INFO - ============================================================
+2026-03-04 22:55:30,234 - __main__ - INFO - 
+[1/3] Downloading malware samples...
+2026-03-04 22:55:30,234 - __main__ - INFO - ============================================================
+2026-03-04 22:55:30,235 - __main__ - INFO - Starting malware download phase
+2026-03-04 22:55:30,235 - __main__ - INFO - ============================================================
+2026-03-04 22:55:30,235 - src.database - INFO - Database initialized at data/dataset.db
+2026-03-04 22:55:30,236 - src.malware_downloader - INFO - 
+==================================================
+2026-03-04 22:55:30,236 - src.malware_downloader - INFO - Processing family: rat
+2026-03-04 22:55:30,236 - src.malware_downloader - INFO - Collecting 10000 samples for family: rat
+2026-03-04 22:55:30,236 - src.malware_downloader - INFO - Querying signature: njRAT

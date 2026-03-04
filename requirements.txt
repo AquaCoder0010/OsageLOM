@@ -1,0 +1,13 @@
+# Core dependencies
+pefile>=2023.2.7
+capstone>=5.0.1
+pyzipper>=0.3.6
+pyyaml>=6.0.1
+requests>=2.31.0
+tqdm>=4.66.1
+
+# Optional: for enhanced PE parsing
+# lief>=0.12.0
+
+# Optional: for VirusTotal integration
+# virustotal-api>=2.0.0
