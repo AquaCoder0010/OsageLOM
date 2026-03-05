@@ -26,7 +26,6 @@ class Config:
         
         with open(config_path, 'r') as f:
             self._config = yaml.safe_load(f)
-        
         self._setup_directories()
     
     def _setup_directories(self):
@@ -42,7 +41,7 @@ class Config:
     def get(self, key: str, default: Any = None) -> Any:
         if self._config is None:
             self.load()
-        
+
         keys = key.split('.')
         value = self._config
         for k in keys:

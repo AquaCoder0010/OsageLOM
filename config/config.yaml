@@ -60,7 +60,7 @@ BENIGN_SAMPLES: 10000
 # ============================================
 # MALWAREBAZAAR API
 # ============================================
-MALWAREBAZAAR_API_KEY: "ENTER_API_KEY_HERE"
+MALWAREBAZAAR_API_KEY: "MALWAREBAZZAR_API_KEY"
 MALWAREBAZAAR_API_URL: "https://mb-api.abuse.ch/api/v1/"
 DAILY_DOWNLOAD_LIMIT: 10000
 ZIP_PASSWORD: "infected"
@@ -101,3 +101,11 @@ DB_ECHO: false
 # ============================================
 LOG_LEVEL: "INFO"
 LOG_DIR: "logs"
+
+# ============================================
+# TELEGRAM NOTIFICATIONS (Optional)
+# ============================================
+# Get token from @BotFather, chat_id from @userinfobot
+TELEGRAM_BOT_TOKEN: "TELEGRAM-BOT-TOKEN-ID"
+TELEGRAM_CHAT_ID: "CHAT-ID"
+NOTIFY_EVERY_N_SAMPLES: 100

@@ -55,7 +55,7 @@ def download_malware(args):
         logger.error("Please set MALWAREBAZAAR_API_KEY in config.yaml")
         return
     
-    downloader = MalwareDownloader()
+    downloader = MalwareDownloader(telegram_enabled=args.telegram)
     
     if args.family:
         families = {args.family: config.families.get(args.family)}
@@ -201,6 +201,8 @@ Examples:
                        help='Limit number of samples')
     parser.add_argument('--windows-dir', type=str,
                        help='Windows directory for system files')
+    parser.add_argument('--telegram', action='store_true',
+                       help='Enable Telegram progress notifications')
     
     args = parser.parse_args()
     
