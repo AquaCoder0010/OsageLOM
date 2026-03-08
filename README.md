@@ -2,12 +2,7 @@
 
 A toolkit for curating malware opcode datasets from MalwareBazaar for machine learning research.
 
-## Overview
-
-- **Target**: 100,000 PE files (90,000 malware + 10,000 benign)
-- **9 Categories**: RATs, Infostealers, Droppers, Ransomware, Wipers, Worms, Viruses, Rootkits, Benign
-- **Extraction**: Raw opcode bytes from PE `.text` section using Capstone
-
+Current Version is buggy and is prone to error, since it utilizes MalwareBazzar's API. 
 ## Quick Start
 
 ```bash
