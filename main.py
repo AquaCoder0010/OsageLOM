@@ -25,6 +25,7 @@ from src.database import Database
 from src.malware_downloader import MalwareDownloader
 from src.opcode_extractor import OpcodeExtractor
 from src.benign_collector import BenignCollector
+from src.ember_downloader import EmberDownloader
 
 
 def setup_logging():
@@ -58,14 +59,12 @@ def download_malware(args):
     downloader = MalwareDownloader(telegram_enabled=args.telegram)
     
     if args.family:
-        families = {args.family: config.families.get(args.family)}
-        alternatives = {args.family: config.family_alternatives.get(args.family, [])}
         target = args.limit or config.samples_per_family
-        
-        sigs = [families[args.family]] + alternatives[args.family]
-        downloader.collect_family_samples(args.family, sigs, target)
+        count = downloader.download_from_database(family=args.family, limit=target)
+        logger.info(f"Downloaded {count} samples for {args.family}")
     else:
-        downloader.collect_all_families()
+        count = downloader.download_all(target_per_type=args.limit)
+        logger.info(f"Downloaded {count} samples total")
     
     stats = downloader.db.get_family_counts()
     logger.info("\nMalware Collection Summary:")
@@ -118,19 +117,34 @@ def collect_benign(args):
         logger.info("VirusShare benign collection requires VT API integration")
 
 
+def import_ember(args):
+    logger = logging.getLogger(__name__)
+    logger.info("="*60)
+    logger.info("Importing EMBER2024 dataset hashes")
+    logger.info("="*60)
+    
+    downloader = EmberDownloader(data_dir=args.ember_dir)
+    count = downloader.run(split=args.split, file_type=args.file_type)
+    
+    logger.info(f"EMBER import complete: {count} samples added to database")
+
+
 def run_full_pipeline(args):
     logger = logging.getLogger(__name__)
     logger.info("="*60)
     logger.info("Running FULL pipeline")
     logger.info("="*60)
     
-    logger.info("\n[1/3] Downloading malware samples...")
+    logger.info("\n[1/4] Importing EMBER2024 hashes...")
+    import_ember(args)
+    
+    logger.info("\n[2/4] Downloading malware samples...")
     download_malware(args)
     
-    logger.info("\n[2/3] Extracting opcodes...")
+    logger.info("\n[3/4] Extracting opcodes...")
     extract_opcodes(args)
     
-    logger.info("\n[3/3] Collecting benign files...")
+    logger.info("\n[4/4] Collecting benign files...")
     collect_benign(args)
     
     logger.info("\n" + "="*60)
@@ -172,6 +186,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  %(prog)s --import-ember                 Import EMBER2024 hashes
+  %(prog)s --import-ember --split challenge --file-type PE
   %(prog)s --download                    Download all malware families
   %(prog)s --download --family rat        Download only RAT family
   %(prog)s --extract                      Extract opcodes from pending samples
@@ -203,11 +219,26 @@ Examples:
                        help='Windows directory for system files')
     parser.add_argument('--telegram', action='store_true',
                        help='Enable Telegram progress notifications')
+    parser.add_argument('--import-ember', action='store_true',
+                       help='Import EMBER2024 hashes to database')
+    parser.add_argument('--split', type=str, default='challenge',
+                       choices=['all', 'train', 'test', 'challenge'],
+                       help='EMBER dataset split to import')
+    parser.add_argument('--file-type', type=str, default='PE',
+                       choices=['all', 'PE', 'Win32', 'Win64', 'Dot_Net'],
+                       help='EMBER file type to import')
+    parser.add_argument('--ember-dir', type=str,
+                       help='EMBER data directory')
     
     args = parser.parse_args()
     
     if args.stats:
         show_stats(args)
+        return
+    
+    if args.import_ember:
+        setup_logging()
+        import_ember(args)
         return
     
     setup_logging()
