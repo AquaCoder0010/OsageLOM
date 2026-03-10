@@ -154,6 +154,42 @@ class Database:
         
         return [dict(row) for row in rows]
     
+    def get_undownloaded_samples(self, family: str = None, limit: int = None) -> List[Dict]:
+        """Get samples that haven't been downloaded yet (file_path is NULL)."""
+        conn = self.get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        query = "SELECT * FROM samples WHERE file_path IS NULL OR file_path = ''"
+        params = []
+        
+        if family:
+            query += " AND family = ?"
+            params.append(family)
+        
+        if limit:
+            query += f" LIMIT {limit}"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    def update_sample_path(self, sample_id: int, file_path: str, file_size: int = 0):
+        """Update the file_path for a sample after download."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE samples 
+            SET file_path = ?, file_size = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (file_path, file_size, sample_id))
+        
+        conn.commit()
+        conn.close()
+    
     def update_extraction_status(self, sample_id: int, status: str, 
                                   opcode_path: str = None, error: str = None):
         conn = self.get_connection()
