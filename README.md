@@ -1,10 +1,9 @@
 # Malware Opcode Dataset Builder
 
-A toolkit for curating malware opcode datasets from MalwareBazaar for machine learning research.
+A toolkit for curating malware opcode datasets from MalwareBazaar through the extraction of metadata from the EMBER2024 Dataset. 
 
 ## Overview
 
-- **Target**: 100,000 PE files (90,000 malware + 10,000 benign)
 - **9 Categories**: RATs, Infostealers, Droppers, Ransomware, Wipers, Worms, Viruses, Rootkits, Benign
 - **Extraction**: Raw opcode bytes from PE `.text` section using Capstone
 
