@@ -1,7 +1,7 @@
 import os
+import glob
 import json
 import logging
-from pathlib import Path
 from typing import Dict, List, Set
 from collections import Counter
 
@@ -503,28 +503,32 @@ def get_malware_type(family: str) -> str:
 
 class EmberDownloader:
     def __init__(self, data_dir: str = None):
-        self.data_dir = Path(data_dir or config.get('EMBER_DATA_DIR', 'data/ember'))
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir = data_dir or config.get('EMBER_DATA_DIR', 'data/ember')
+        os.makedirs(self.data_dir, exist_ok=True)
         self.db = Database()
         
         logger.info(f"EMBER data directory: {self.data_dir}")
     
     def download_metadata(self, split: str = 'challenge', 
-                         file_type: str = 'PE') -> List[Path]:
+                         file_type: str = 'PE') -> List[str]:
         """Download EMBER2024 metadata using thrember."""
         logger.info(f"Downloading EMBER2024 {split}/{file_type} metadata...")
         
-        thrember.download_dataset(str(self.data_dir), split=split, file_type=file_type)
+        original_dir = os.getcwd()
+        try:
+            thrember.download_dataset(self.data_dir, split=split, file_type=file_type)
+        finally:
+           os.chdir(original_dir)
         
-        files = list(self.data_dir.glob('*.jsonl'))
+        files = glob.glob(os.path.join(self.data_dir, '*.jsonl'))
         logger.info(f"Downloaded {len(files)} metadata files")
         
         return files
     
-    def parse_metadata_files(self, files: List[Path] = None) -> Dict[str, List[dict]]:
+    def parse_metadata_files(self, files: List[str] = None) -> Dict[str, List[dict]]:
         """Parse JSON by malware type."""
         if files is None:
-            files = list(self.data_dir.glob('*.jsonl'))
+            files = glob.glob(os.path.join(self.data_dir, '*.jsonl'))
         
         type_samples = {
             'rat': [],
@@ -541,7 +545,7 @@ class EmberDownloader:
         unmapped = 0
         
         for file_path in files:
-            logger.info(f"Parsing: {file_path.name}")
+            logger.info(f"Parsing: {file_path}")
             
             with open(file_path, 'r') as f:
                 for line in f:

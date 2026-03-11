@@ -55,7 +55,7 @@ def download_malware(args):
     if not config.get('MALWAREBAZAAR_API_KEY'):
         logger.error("Please set MALWAREBAZAAR_API_KEY in config.yaml")
         return
-    
+
     downloader = MalwareDownloader(telegram_enabled=args.telegram)
     
     if args.family:
@@ -135,6 +135,7 @@ def run_full_pipeline(args):
     logger.info("Running FULL pipeline")
     logger.info("="*60)
     
+
     logger.info("\n[1/4] Importing EMBER2024 hashes...")
     import_ember(args)
     
