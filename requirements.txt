@@ -1,0 +1,4 @@
+requests
+pefile
+pyzipper
+capstone
