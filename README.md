@@ -2,6 +2,7 @@
 
 Query MalwareBazaar API to collect 64-bit Windows PE malware samples and extract opcode sequences.
 
+Download the SHA1 .txt files from here: https://bazaar.abuse.ch/export/#csv
 ## Setup
 
 ```bash
