@@ -11,7 +11,7 @@ from family_to_type import FAMILY_TO_TYPE_MAPPING, TYPE_LIST
 
 # --- Configuration ---
 API_URL = "https://mb-api.abuse.ch/api/v1/"
-API_KEY = "-_-"
+API_KEY = "ce04109870b5c936962a6973e6015ca930d14ffc112803c6"
 ZIP_PASSWORD = b"infected"
 SHA1_TXT = "full_sha1.txt"
 OUTPUT_DIR = "data"
@@ -92,10 +92,11 @@ except FileNotFoundError:
     print(f"Error: {SHA1_TXT} not found.")
     lines = []
 
+LIMIT = 100_000
+processed_count = 0
 for line_num, line in enumerate(lines, 1):
-    # Filter for line 14 logic as requested
-    if line_num != 14:
-        continue
+    if processed_count >  LIMIT:
+        break
 
     sha1 = line.strip()         
     if not sha1 or sha1.startswith("#") or len(sha1) != 40:
@@ -137,6 +138,9 @@ for line_num, line in enumerate(lines, 1):
         })
         
         print(f"Successfully processed {sha1[:8]}")
+        processed_count += 1
+        
+
             
     except Exception as e:
         print(f"[-] Failed to process {sha1[:8]}: {e}")
