@@ -136,7 +136,11 @@ for line_num, line in enumerate(lines, 1):
             "family": family_name,
             "output_dir": output_name
         })
-        
+
+        if processed_count % 10 == 0: 
+            df = pd.DataFrame(results_data)
+            df.to_csv("output.csv", index=False)
+
         print(f"Successfully processed {sha1[:8]}")
         processed_count += 1
         
@@ -149,6 +153,7 @@ for line_num, line in enumerate(lines, 1):
 
 # --- Final DataFrame ---
 df = pd.DataFrame(results_data)
+df.to_csv("output.csv", index=False)
 
 print("\n--- Processing Complete ---")
 print(df)
