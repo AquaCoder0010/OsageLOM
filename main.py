@@ -11,7 +11,7 @@ from family_to_type import FAMILY_TO_TYPE_MAPPING, TYPE_LIST
 
 # --- Configuration ---
 API_URL = "https://mb-api.abuse.ch/api/v1/"
-API_KEY = "ce04109870b5c936962a6973e6015ca930d14ffc112803c6"
+API_KEY = "-_-"
 ZIP_PASSWORD = b"infected"
 SHA1_TXT = "full_sha1.txt"
 OUTPUT_DIR = "data"
