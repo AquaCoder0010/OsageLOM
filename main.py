@@ -11,6 +11,8 @@ from family_to_type import FAMILY_TO_TYPE_MAPPING, TYPE_LIST
 
 # --- Configuration ---
 API_URL = "https://mb-api.abuse.ch/api/v1/"
+# uwu this doesn't exist
+
 API_KEY = "ce04109870b5c936962a6973e6015ca930d14ffc112803c6"
 ZIP_PASSWORD = b"infected"
 SHA1_TXT = "full_sha1.txt"
@@ -94,9 +96,22 @@ except FileNotFoundError:
 
 LIMIT = 100_000
 processed_count = 0
+
+last_sha1 = None
+if os.path.isfile('output.csv'):
+    df = pd.read_csv('output.csv')
+    last_sha1 = df.iloc[-1]['sha1']
+    
+    if len(last_sha1) != 40:
+        last_sha1 = None
+    
+
 for line_num, line in enumerate(lines, 1):
     if processed_count >  LIMIT:
         break
+
+    if last_sha1 != None and line != last_sha1:
+        continue
 
     sha1 = line.strip()         
     if not sha1 or sha1.startswith("#") or len(sha1) != 40:
@@ -139,7 +154,7 @@ for line_num, line in enumerate(lines, 1):
 
         if processed_count % 10 == 0: 
             df = pd.DataFrame(results_data)
-            df.to_csv("output.csv", index=False)
+            df.to_csv("output.csv", mode='a', index=False)
 
         print(f"Successfully processed {sha1[:8]}")
         processed_count += 1
@@ -149,7 +164,7 @@ for line_num, line in enumerate(lines, 1):
     except Exception as e:
         print(f"[-] Failed to process {sha1[:8]}: {e}")
         
-    time.sleep(0.1)
+    time.sleep(0.5)
 
 # --- Final DataFrame ---
 df = pd.DataFrame(results_data)
