@@ -111,10 +111,11 @@ for line_num, line in enumerate(lines, 1):
     if processed_count >  LIMIT:
         break
 
+    line = line.strip()
     if last_sha1 != None and line != last_sha1:
         continue
 
-    sha1 = line.strip()         
+    sha1 = line         
     if not sha1 or sha1.startswith("#") or len(sha1) != 40:
         continue
     
@@ -155,7 +156,7 @@ for line_num, line in enumerate(lines, 1):
 
         if processed_count % 10 == 0: 
             df = pd.DataFrame(results_data)
-            df.to_csv("output.csv", mode='a', index=False)
+            df.to_csv("output.csv", mode='a', index=False, header=False)
 
         print(f"Successfully processed {sha1[:8]}")
         processed_count += 1
