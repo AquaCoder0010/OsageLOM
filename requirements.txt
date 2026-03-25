@@ -1,5 +1,0 @@
-requests
-pefile
-pyzipper
-capstone
-pandas
