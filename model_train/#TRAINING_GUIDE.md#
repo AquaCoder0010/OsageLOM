@@ -1,0 +1,207 @@
+# ByteFormer Training Arguments Guide
+
+This document explains all command-line arguments available in `train.py` for training the ByteFormer model.
+
+---
+
+## Data Arguments
+
+### `--train-dir` (required)
+- **Type:** `str`
+- **Description:** Path to the training data directory
+- **Expected Structure:**
+  ```
+  train_dir/
+    class_0/
+      sample1.txt
+      sample2.txt
+    class_1/
+      sample3.txt
+  ```
+- Each `.txt` file contains space-separated byte values (0-255), e.g., `23 156 89 255 0 34`
+
+### `--val-dir` (required)
+- **Type:** `str`
+- **Description:** Path to the validation data directory
+- **Same structure as `--train-dir`**
+
+### `--max-seq-len`
+- **Type:** `int`
+- **Default:** `100000`
+- **Description:** Maximum sequence length (number of bytes) per sample
+- **Behavior:**
+  - Sequences longer than this are truncated
+  - Sequences shorter than this are padded with `-1`
+
+---
+
+## Model Arguments
+
+### `--mode`
+- **Type:** `str`
+- **Default:** `"tiny"`
+- **Choices:** `["tiny", "small", "base"]`
+- **Description:** Model size variant. Determines `embed_dim`, `n_layers`, `n_heads`, and `ffn_dim` automatically.
+- **Configurations:**
+  | Mode   | Embed Dim | Layers | Heads | FFN Dim |
+  |--------|-----------|--------|-------|----------|
+  | tiny   | 192       | 12     | 3     | 768      |
+  | small  | 384       | 12     | 6     | 1536     |
+  | base   | 768       | 12     | 12    | 3072     |
+
+### `--vocab-size`
+- **Type:** `int`
+- **Default:** `257`
+- **Description:** Size of the byte vocabulary
+- **Note:** 256 unique bytes (0-255) + 1 mask token = 257
+
+### `--embed-dim`
+- **Type:** `int`
+- **Default:** `192`
+- **Description:** Embedding dimension for byte tokens
+- **Note:** Ignored if `--mode` is specified (mode takes precedence)
+
+### `--n-layers`
+- **Type:** `int`
+- **Default:** `12`
+- **Description:** Number of transformer encoder layers
+
+### `--n-heads`
+- **Type:** `int`
+- **Default:** `3`
+- **Description:** Number of attention heads in multi-head attention
+
+### `--ffn-dim`
+- **Type:** `int`
+- **Default:** `768`
+- **Description:** Hidden dimension in the feed-forward network (FFN) within each transformer layer
+
+### `--conv-kernel-size`
+- **Type:** `int`
+- **Default:** `16`
+- **Description:** Kernel size for the token reduction convolution
+- **Purpose:** Reduces sequence length before transformer to save computation
+- **Note:** Set to `0` to disable token reduction
+
+### `--window-size`
+- **Type:** `int`
+- **Default:** `128`
+- **Description:** Window size for shifted window attention
+- **Purpose:** Limits attention to local windows rather than full sequence
+- **Recommended:** Power of 2 (e.g., 64, 128, 256)
+
+---
+
+## Training Arguments
+
+### `--batch-size`
+- **Type:** `int`
+- **Default:** `32`
+- **Description:** Number of samples per training batch
+
+### `--epochs`
+- **Type:** `int`
+- **Default:** `100`
+- **Description:** Total number of training epochs
+
+### `--learning-rate`
+- **Type:** `float`
+- **Default:** `1e-3` (0.001)
+- **Description:** Initial learning rate for AdamW optimizer
+
+### `--weight-decay`
+- **Type:** `float`
+- **Default:** `0.05`
+- **Description:** L2 weight decay for AdamW optimizer
+- **Purpose:** Regularization to prevent overfitting
+
+### `--label-smoothing`
+- **Type:** `float`
+- **Default:** `0.1`
+- **Description:** Label smoothing factor for cross-entropy loss
+- **Purpose:** Prevents overconfidence, improves generalization
+- **Range:** 0.0 (no smoothing) to 1.0
+
+### `--num-workers`
+- **Type:** `int`
+- **Default:** `4`
+- **Description:** Number of worker processes for data loading
+- **Recommendation:** Set to 0 for debugging, higher values for faster data loading
+
+---
+
+## Save Arguments
+
+### `--save-dir`
+- **Type:** `str`
+- **Default:** `"checkpoints"`
+- **Description:** Directory to save model checkpoints
+
+### `--save-freq`
+- **Type:** `int`
+- **Default:** `10`
+- **Description:** Save checkpoint every N epochs
+
+---
+
+## Usage Examples
+
+### Basic Training
+```bash
+python train.py \
+  --train-dir /path/to/train \
+  --val-dir /path/to/val
+```
+
+### Custom Model Configuration
+```bash
+python train.py \
+  --train-dir /path/to/train \
+  --val-dir /path/to/val \
+  --mode small \
+  --batch-size 16 \
+  --epochs 50 \
+  --learning-rate 5e-4
+```
+
+### Long Sequence Training
+```bash
+python train.py \
+  --train-dir /path/to/train \
+  --val-dir /path/to/val \
+  --max-seq-len 200000 \
+  --window-size 256
+```
+
+### Full Customization
+```bash
+python train.py \
+  --train-dir /path/to/train \
+  --val-dir /path/to/val \
+  --max-seq-len 100000 \
+  --mode base \
+  --batch-size 8 \
+  --epochs 200 \
+  --learning-rate 1e-3 \
+  --weight-decay 0.05 \
+  --label-smoothing 0.1 \
+  --conv-kernel-size 32 \
+  --window-size 128 \
+  --save-dir ./checkpoints \
+  --save-freq 20
+```
+
+---
+
+## Output Files
+
+| File | Description |
+|------|-------------|
+| `best_model.pth` | Best model based on validation accuracy |
+| `checkpoint_epoch_N.pth` | Periodic checkpoint every `--save-freq` epochs |
+
+Each checkpoint contains:
+- `epoch`: Current epoch number
+- `model_state_dict`: Model weights
+- `optimizer_state_dict`: Optimizer state
+- `metrics`: Validation metrics (loss, accuracy)
