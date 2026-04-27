@@ -1,0 +1,509 @@
+"""
+ByteFormer Model Implementation with accurate WindowedAttention from corenet.
+"""
+
+import argparse
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
+from typing import Tuple, Optional
+
+
+class ByteFormerConfig:
+    """Configuration class for ByteFormer model sizes."""
+    
+    MODES = {
+        "tiny": {"embed_dim": 192, "n_layers": 12, "n_heads": 3, "ffn_dim": 768},
+        "small": {"embed_dim": 384, "n_layers": 12, "n_heads": 6, "ffn_dim": 1536},
+        "base": {"embed_dim": 768, "n_layers": 12, "n_heads": 12, "ffn_dim": 3072},
+    }
+
+
+def window_partition(t: torch.Tensor, window_size: int) -> torch.Tensor:
+    """
+    Partition tensor into chunks of size window_size.
+    
+    Args:
+        t: Tensor of shape [batch_size, sequence_length, embed_dim]
+        window_size: The desired window size
+    
+    Returns:
+        Tensor of shape [batch_size * num_windows, window_size, embed_dim]
+    """
+    B, N, C = t.shape
+    if not N % window_size == 0:
+        raise ValueError(f"sequence length {N} must be divisible by window size {window_size}")
+    t = t.reshape(B * N // window_size, window_size, C)
+    return t
+
+
+def window_partition_reverse(t: torch.Tensor, B: int, num_windows: int, C: int) -> torch.Tensor:
+    """Reverse the window partition operation."""
+    t = t.reshape(B, num_windows * t.shape[1], C)
+    return t
+
+
+def get_windows_shift_mask(N: int, window_size: int, window_shift: int, device: torch.device) -> torch.Tensor:
+    """
+    Get mask for shifted window attention.
+    
+    Args:
+        N: Sequence length
+        window_size: Window size
+        window_shift: Shift amount
+        device: Device for tensor
+    
+    Returns:
+        Mask tensor of shape [N // window_size, window_size, window_size]
+    """
+    ret = torch.zeros(N // window_size, window_size, window_size, device=device)
+    ret[-1].fill_(float("-inf"))
+    ret[-1, :window_size - window_shift, :window_size - window_shift] = 0
+    ret[-1, -window_shift:, -window_shift:] = 0
+    return ret
+
+
+def pad_x_and_mask(x: torch.Tensor, key_padding_mask: torch.Tensor, window_size: int):
+    """Pad input to be divisible by window size."""
+    B, N = key_padding_mask.shape
+    pad_len = (window_size - N % window_size) % window_size
+    
+    if pad_len > 0:
+        x = torch.cat([x, torch.zeros(B, pad_len, x.shape[2], device=x.device)], dim=1)
+        key_padding_mask = torch.cat([key_padding_mask, torch.full((B, pad_len), float("-inf"), device=key_padding_mask.device)], dim=1)
+    
+    return x, key_padding_mask
+
+
+def window_x_and_key_padding_mask(
+    x: torch.Tensor, key_padding_mask: torch.Tensor, window_size: int, window_shift: int
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Perform windowing on input and mask for windowed attention."""
+    B, N = key_padding_mask.shape
+    assert x.shape[:2] == (B, N)
+
+    x, key_padding_mask = pad_x_and_mask(x, key_padding_mask, window_size)
+
+    if window_shift > 0:
+        x = torch.roll(x, shifts=(-window_shift), dims=1)
+        key_padding_mask = torch.roll(key_padding_mask, shifts=(-window_shift), dims=1)
+
+    x_windows = window_partition(x, window_size)
+    token_mask_windows = key_padding_mask.reshape(B * x.shape[1] // window_size, window_size)
+    window_mask = get_windows_shift_mask(x.shape[1], window_size, window_shift, x_windows.device).expand(B, -1, -1, -1)
+    window_mask = window_mask.reshape(window_mask.shape[0] * window_mask.shape[1], window_mask.shape[2], window_mask.shape[3])
+
+    return x_windows, token_mask_windows, window_mask
+
+
+def unwindow_x(x_windows: torch.Tensor, B: int, N: int, C: int, window_shift: int):
+    """Reverse the windowing operation."""
+    num_windows = x_windows.shape[0] // B
+    x = window_partition_reverse(x_windows, B, num_windows, C)
+
+    if window_shift > 0:
+        x = torch.roll(x, shifts=window_shift, dims=1)
+    x = x[:, :N]
+
+    return x
+
+
+class MultiHeadAttention(nn.Module):
+    """
+    Multi-head attention from corenet implementation.
+    """
+    
+    def __init__(self, embed_dim: int, num_heads: int, attn_dropout: float = 0.0):
+        super().__init__()
+        if embed_dim % num_heads != 0:
+            raise ValueError(f"embed_dim {embed_dim} must be divisible by num_heads {num_heads}")
+        
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        self.scaling = self.head_dim ** -0.5
+        
+        self.qkv_proj = nn.Linear(embed_dim, 3 * embed_dim)
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.attn_dropout = nn.Dropout(attn_dropout)
+        self.softmax = nn.Softmax(dim=-1)
+    
+    def forward(
+        self, x: Tensor, 
+        key_padding_mask: Optional[Tensor] = None, 
+        attn_mask: Optional[Tensor] = None
+    ) -> Tensor:
+        """
+        Forward pass for multi-head attention.
+        
+        Args:
+            x: Input tensor [B, N, C]
+            key_padding_mask: Padding mask [B, N]
+            attn_mask: Attention mask
+        
+        Returns:
+            Output tensor [B, N, C]
+        """
+        B, S_len, _ = x.shape
+        
+        # Compute QKV
+        qkv = self.qkv_proj(x).reshape(B, S_len, 3, self.num_heads, self.head_dim)
+        qkv = qkv.transpose(1, 3).contiguous()
+        query, key, value = qkv[:, :, 0], qkv[:, :, 1], qkv[:, :, 2]
+        
+        query = query * self.scaling
+        key = key.transpose(-2, -1)
+        
+        # QK^T
+        attn = torch.matmul(query, key)
+        
+        batch_size, num_heads, num_src_tokens, num_tgt_tokens = attn.shape
+        
+        if attn_mask is not None:
+            attn_mask = attn_mask.unsqueeze(1)
+            attn = attn + attn_mask
+        
+        if key_padding_mask is not None:
+            attn = attn.masked_fill(
+                key_padding_mask.unsqueeze(1).unsqueeze(2).bool(),
+                float("-inf")
+            )
+        
+        attn = self.softmax(attn.float()).to(attn.dtype)
+        attn = self.attn_dropout(attn)
+        
+        # Weighted sum
+        out = torch.matmul(attn, value)
+        out = out.transpose(1, 2).reshape(B, S_len, -1)
+        out = self.out_proj(out)
+        
+        return out
+
+
+class TransformerEncoderLayer(nn.Module):
+    """
+    Single transformer encoder layer with pre-norm.
+    """
+    
+    def __init__(self, embed_dim: int, num_heads: int, ffn_dim: int, dropout: float = 0.0):
+        super().__init__()
+        
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.attn = MultiHeadAttention(embed_dim, num_heads)
+        self.dropout1 = nn.Dropout(dropout)
+        
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.ffn = nn.Sequential(
+            nn.Linear(embed_dim, ffn_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(ffn_dim, embed_dim),
+            nn.Dropout(dropout)
+        )
+    
+    def forward(self, x: Tensor, key_padding_mask: Optional[Tensor] = None, attn_mask: Optional[Tensor] = None) -> Tensor:
+        # Multi-head attention with pre-norm
+        res = x
+        x = self.norm1(x)
+        x = self.attn(x, key_padding_mask, attn_mask)
+        x = res + self.dropout1(x)
+        
+        # FFN with pre-norm
+        x = x + self.ffn(self.norm2(x))
+        
+        return x
+
+
+class WindowedTransformerEncoder(nn.Module):
+    """
+    Transformer encoder with windowed (shifted window) attention.
+    This is the accurate implementation from corenet.
+    """
+    
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        ffn_dim: int,
+        window_size: int,
+        window_shift: int,
+        dropout: float = 0.0
+    ):
+        super().__init__()
+        
+        self.encoder_layer = TransformerEncoderLayer(embed_dim, num_heads, ffn_dim, dropout)
+        self.window_size = window_size
+        self.window_shift = window_shift
+    
+    def forward(
+        self, 
+        x: Tensor, 
+        key_padding_mask: Optional[Tensor] = None,
+        attn_mask: Optional[Tensor] = None
+    ) -> Tensor:
+        """
+        Forward pass with windowing.
+        
+        Args:
+            x: Input tensor [B, N, C]
+            key_padding_mask: Padding mask [B, N]
+            attn_mask: Additional attention mask
+        
+        Returns:
+            Output tensor [B, N, C]
+        """
+        B, N, C = x.shape
+        
+        # Handle None key_padding_mask
+        if key_padding_mask is None:
+            key_padding_mask = torch.zeros(B, N, dtype=torch.float, device=x.device)
+        
+        # Window the input
+        x_windows, windowed_key_padding_mask, windows_mask = window_x_and_key_padding_mask(
+            x, key_padding_mask, self.window_size, self.window_shift
+        )
+        
+        total_mask = windowed_key_padding_mask.unsqueeze(1) + windows_mask
+        
+        if attn_mask is not None:
+            total_mask += attn_mask
+        
+        # Handle fully masked windows to avoid NaN
+        fully_masked_windows = total_mask.max(dim=-1).values == float("-inf")
+        total_mask[fully_masked_windows] = 0
+        
+        # Pass through transformer layer
+        x_windows = self.encoder_layer(x_windows, attn_mask=total_mask)
+        
+        
+        # Unwindow the output
+        x = unwindow_x(x_windows, B, N, C, self.window_shift)
+        
+        return x
+
+
+class TokenReduction(nn.Module):
+    """Conv1d layer to reduce sequence length before transformer."""
+    
+    def __init__(self, embed_dim: int, kernel_size: int):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            embed_dim, embed_dim,
+            kernel_size=kernel_size,
+            stride=kernel_size // 2,
+            bias=False
+        )
+        # 90 %
+
+    
+    def forward(self, x: Tensor) -> Tensor:
+        # 99 % reduction in size.
+        return self.conv(self.conv(x.permute(0, 2, 1))).permute(0, 2, 1)
+
+
+class PositionalEmbedding(nn.Module):
+    """Learnable positional embeddings for byte sequences."""
+    
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        super().__init__()
+        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+    
+    def forward(self, seq_len: int) -> Tensor:
+        positions = torch.arange(seq_len, device=self.embedding.weight.device)
+        return self.embedding(positions)
+
+
+class ByteFormer(nn.Module):
+    """
+    ByteFormer: Vision Transformer operating on raw image bytes.
+    With accurate WindowedTransformerEncoder from corenet.
+    """
+    
+    def __init__(
+        self,
+        vocab_size: int = 257,
+        embed_dim: int = 192,
+        n_layers: int = 12,
+        n_heads: int = 3,
+        ffn_dim: int = 768,
+        conv_kernel_size: int = 16,
+        max_num_tokens: int = 50000,
+        num_classes: int = 1000,
+        window_size: int = 128,
+        window_shift: int = 64,
+        dropout: float = 0.0
+    ):
+        super().__init__()
+        
+        self.embed_dim = embed_dim
+        self.vocab_size = vocab_size
+        
+        # Byte embedding layer
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=-1)
+        
+        # Token reduction convolution
+        self.token_reduction = TokenReduction(embed_dim, conv_kernel_size) if conv_kernel_size > 0 else None
+        
+        # Positional embeddings
+        self.pos_embed = PositionalEmbedding(max_num_tokens, embed_dim)
+        
+        # Transformer backbone with windowed attention
+        self.transformer = nn.ModuleList([
+            WindowedTransformerEncoder(
+                embed_dim=embed_dim,
+                num_heads=n_heads,
+                ffn_dim=ffn_dim,
+                window_size=window_size,
+                window_shift=window_shift if i % 2 == 1 else 0,  # Alternate shift
+                dropout=dropout
+            )
+            for i in range(n_layers)
+        ])
+        
+        self.norm = nn.LayerNorm(embed_dim)
+        
+        # Classification head
+        self.classifier = nn.Linear(embed_dim, num_classes)
+        
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize embedding weights."""
+        nn.init.trunc_normal_(self.embedding.weight[:-1], std=math.sqrt(1.0 / self.embed_dim))
+    
+#    def get_backbone_inputs(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+#        """
+#        Convert input bytes to embeddings for the transformer.
+#        
+#        Args:
+#            x: Integer tensor [B, N] with byte values (0-255), -1 for padding
+#        
+#        Returns:
+#            Embeddings tensor and attention mask
+#        """
+#        mask = torch.zeros_like(x, dtype=torch.float)
+#        mask[x == -1] = float("-inf")
+#        
+#        x[x == -1] = 0  # Replace padding with embedding index 0
+#        x = self.embedding(x)
+#        
+#        # Apply token reduction
+#        if self.token_reduction is not None:
+#            x = self.token_reduction(x)
+#        
+#        # Add positional embeddings
+#        seq_len = x.shape[1]
+#        x = x + self.pos_embed(seq_len)
+#        
+#        return x, mask
+#
+    def get_backbone_inputs(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+        # 1. Create initial mask based on indices before they are embedded
+        mask = torch.zeros_like(x, dtype=torch.float)
+        mask[x == -1] = float("-inf")
+        
+        # 2. Embed the bytes
+        x_indices = x.clone()
+        x_indices[x_indices == -1] = 0  
+        x_embeds = self.embedding(x_indices) 
+        
+        # 3. Apply Token Reduction (Convolution)
+        if self.token_reduction is not None:
+            # Reduce the data
+            x_embeds = self.token_reduction(x_embeds)
+            
+            is_pad = (mask == float("-inf")).float().unsqueeze(1) # [B, 1, N]
+            
+            # FIRST POOL
+            is_pad_pooled = F.max_pool1d(
+                is_pad,
+                kernel_size=self.token_reduction.conv.kernel_size[0],
+                stride=self.token_reduction.conv.stride[0],
+                padding=self.token_reduction.conv.padding[0]
+            )
+            
+            # SECOND POOL (Added to match the double-conv in TokenReduction)
+            is_pad_pooled = F.max_pool1d(
+                is_pad_pooled,
+                kernel_size=self.token_reduction.conv.kernel_size[0],
+                stride=self.token_reduction.conv.stride[0],
+                padding=self.token_reduction.conv.padding[0]
+            ).squeeze(1) 
+        
+            # Overwrite the original mask variable
+            mask = torch.zeros_like(is_pad_pooled)
+            mask[is_pad_pooled > 0] = float("-inf")
+    
+        # 4. Add positional embeddings to the REDUCED sequence
+        seq_len = x_embeds.shape[1]
+        x_embeds = x_embeds + self.pos_embed(seq_len)
+    
+        return x_embeds, mask
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Forward pass through ByteFormer.
+        
+        Args:
+            x: Input tensor [B, N] containing byte values
+        
+        Returns:
+            Logits [B, num_classes]
+        """
+        x, mask = self.get_backbone_inputs(x)
+        
+        # Pass through transformer layers
+        for block in self.transformer:
+            x = block(x, mask)
+        
+        x = self.norm(x)
+        
+        # Mean pooling
+        mask_expanded = mask.unsqueeze(-1)
+        x = x.masked_fill(mask_expanded == float("-inf"), 0)
+        x = x.sum(dim=1) / (mask != float("-inf")).sum(dim=1).unsqueeze(-1).clamp(min=1)
+        
+        return self.classifier(x)
+
+
+#def create_byteformer(mode: str = "tiny", num_classes: int = 1000, **kwargs) -> ByteFormer:
+#""
+#actory function to create a ByteFormer model.
+#
+#rgs:
+#   mode: Model size ("tiny", "small", "base")
+#   num_classes: Number of output classes
+#   **kwargs: Additional model configuration
+#
+#eturns:
+#   ByteFormer model instance
+#""
+#onfig = ByteFormerConfig.MODES[mode]
+#rint('AHHHHH ')
+#rint(config['embed_dim'])
+#eturn ByteFormer(
+#   embed_dim=config["embed_dim"],
+#   n_layers=config["n_layers"],
+#   n_heads=config["n_heads"],
+#   ffn_dim=config["ffn_dim"],
+#   num_classes=num_classes,
+#   **kwargs
+#
+def create_byteformer(mode: str = "tiny", num_classes: int = 1000, **kwargs) -> ByteFormer:
+    """
+    Factory function to create a ByteFormer model.
+    """
+    # 1. Get a copy of the base configuration for the selected mode
+    config = ByteFormerConfig.MODES[mode].copy()
+    
+    # 2. Update kwargs with the mode config 
+    # (This safely overwrites any conflicting keys like 'embed_dim' in kwargs)
+    kwargs.update(config)
+    
+    # 3. Unpack the merged dictionary into the model
+    return ByteFormer(
+        num_classes=num_classes,
+        **kwargs
+    )
