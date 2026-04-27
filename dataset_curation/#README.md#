@@ -1,0 +1,59 @@
+# MalwareBazaar PE Opcode Curator
+
+This script downloads PE executable samples from [MalwareBazaar](https://bazaar.abuse.ch/) by SHA1 hash, extracts executable section opcodes, and records metadata to a CSV file. It uses multi-threading where each thread requires its own MalwareBazaar API key.
+
+## Usage
+
+```bash
+python curate.py -k API_KEY_1 [API_KEY_2 ...] -s sha1_list.txt -o output_dir -c output.csv
+```
+
+## Arguments
+
+| Argument | Short | Description | Default |
+|----------|-------|-------------|---------|
+| `--keys` | `-k` | One or more MalwareBazaar API keys (required) | — |
+| `--sha1-file` | `-s` | Newline-delimited SHA1 hash list | `full_sha1.txt` |
+| `--output-dir` | `-o` | Directory for `.rtc` opcode files | `data` |
+| `--csv` | `-c` | Output CSV path | `output.csv` |
+| `--flush-every` | `-f` | Rows to accumulate before CSV flush | 10 |
+| `--delay` | `-d` | Seconds to wait between API requests | 0.5 |
+
+## Example
+
+```bash
+python curate.py -k YOUR_API_KEY_1 YOUR_API_KEY_2 ...  -s sha1_hashes.txt -o malware_opcodes -c results.csv
+```
+
+The script resumes from existing CSV entries if interrupted.
+
+## How It Works
+
+The curator works as a multi-threaded pipeline:
+
+1. **Load SHA1 hashes** - Reads a newline-delimited file of SHA1 hashes, I used the SHA1 hashes as opposed to SHA256 because at the time of curation the SHA256 corpus was not working.
+2. **Partition work** - Distributes hashes across threads (one thread per API key)
+3. **For each SHA1**:
+   - Queries MalwareBazaar API for metadata (SHA256, file format, malware family)
+   - Skips non-PE (EXE) files
+   - Maps malware family to type using `family_to_type` mapping
+   - Downloads the password-protected ZIP containing the sample
+   - Extracts the PE file from the ZIP (password: `infected`)
+   - Extracts executable sections and saves as `.rtc` file
+   - Records metadata to CSV (thread-safe, periodic flush)
+4. **Resume support** - If CSV exists, skips already-processed SHA1s
+
+## Dependencies
+
+```bash
+pip install requests pandas pyzipper pefile
+```
+
+## Output
+
+- **`.rtc` files**: Raw bytes from executable sections (`.text`, `.code`, etc.)
+- **`output.csv`**: Columns are `sha1`, `sha256`, `file_type`, `family`, `output_dir`
+
+## Rate Limiting
+
+Use `--delay` to respect MalwareBazaar's rate limits. Each thread sleeps this many seconds between requests.
