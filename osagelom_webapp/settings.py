@@ -125,3 +125,12 @@ STATICFILES_DIRS = [
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://osagelom.onrender.com'
+]
+
+# Also ensure CSRF cookie settings are correct
+CSRF_COOKIE_SECURE = True  # Required for HTTPS
+CSRF_COOKIE_HTTPONLY = False  # Must be False so JS can read it[citation:9]
+CSRF_COOKIE_SAMESITE = 'Lax'
