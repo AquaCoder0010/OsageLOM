@@ -1,0 +1,120 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OsageLOM - PE File Scanner</title>
+    <link rel="stylesheet" href="{% static 'scanner/style.css' %}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-text">OsageLOM</span>
+            </div>
+            <nav class="nav">
+                <a href="#" class="nav-link active">Home</a>
+                <a href="#" class="nav-link">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <section class="upload-section">
+                <h1 class="page-title">Scan suspicious PE-files through our LOM model</h1>
+                <p class="page-subtitle">Upload a valid PE file to check for malware</p>
+
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-zone" id="uploadZone">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17,8 12,3 7,8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <p class="upload-text">Drag and drop your file here</p>
+                        <p class="upload-subtext">or</p>
+                        <label class="btn btn-upload">
+                            Select File
+                            <input type="file" id="fileInput" accept=".exe,.dll,.sys,.scr,.cpl,.ocx,.msi,.cab,.jar" hidden>
+                        </label>
+                        <p class="upload-formats">Supported formats: EXE, DLL, SYS, SCR, CPL, OCX, MSI, CAB, JAR</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-header">
+                    <div class="file-info">
+                        <div class="file-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                            </svg>
+                        </div>
+                        <div class="file-details">
+                            <h2 class="file-name" id="fileName">file.exe</h2>
+                            <p class="file-meta" id="fileMeta">EXE - 1.2 MB - PE32 executable</p>
+                        </div>
+                    </div>
+                    <div class="results-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Last analysis</span>
+                            <span class="stat-value" id="lastAnalysis">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">File size</span>
+                            <span class="stat-value" id="fileSize">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="scan-progress" id="scanProgress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">Scanning file...</p>
+                </div>
+
+                <div class="verdict-section" id="verdictSection" style="display: none;">
+                    <div class="verdict" id="verdict">
+                        <div class="verdict-icon" id="verdictIcon"></div>
+                        <div class="verdict-text">
+                            <h3 class="verdict-title" id="verdictTitle"></h3>
+                            <p class="verdict-subtitle" id="verdictSubtitle"></p>
+                        </div>
+                    </div>
+                    <div class="confidence-section">
+                        <p class="confidence-label">Confidence Score</p>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" id="confidenceFill"></div>
+                        </div>
+                        <p class="confidence-value" id="confidenceValue"></p>
+                    </div>
+                </div>
+
+                <div class="actions-bar">
+                    <button class="btn btn-secondary" id="rescanBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23,4 23,10 17,10"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                        </svg>
+                        Re-scan
+                    </button>
+                    <button class="btn btn-outline" id="newFileBtn">Scan New File</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; OsageLOM - PE Malware Scanner</p>
+        </div>
+    </footer>
+
+    <script src="{% static 'scanner/script.js' %}"></script>
+</body>
+</html>
