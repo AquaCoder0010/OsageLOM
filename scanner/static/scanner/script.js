@@ -1,5 +1,21 @@
 const FILE_EXTENSIONS = ['.exe', '.dll', '.sys', '.scr', '.cpl', '.ocx', '.msi', '.cab', '.jar'];
 
+function getCSRFToken() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -117,9 +133,13 @@ async function scanFileAPI(file) {
     const formData = new FormData();
     formData.append('file', file);
     
+    const csrfToken = getCSRFToken();
+    const headers = csrfToken ? { 'X-CSRFToken': csrfToken } : {};
+    
     const response = await fetch('/api/scan/', {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: headers
     });
     
     if (!response.ok) {

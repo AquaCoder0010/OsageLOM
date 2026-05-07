@@ -2,7 +2,7 @@ import os
 import tempfile
 from django.shortcuts import render
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.conf import settings
 
@@ -70,8 +70,6 @@ def predict(file_path: str):
         'label': 'MALWARE' if prediction == 1 else 'BENIGN'
     }
 
-
-@csrf_exempt
 @require_POST
 def scan_file(request):
     uploaded_file = request.FILES.get('file')
@@ -98,5 +96,6 @@ def scan_file(request):
     })
 
 
+@ensure_csrf_cookie
 def home(request):
     return render(request, 'scanner/index.html')

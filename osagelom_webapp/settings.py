@@ -26,6 +26,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
+
 ALLOWED_HOSTS = ['.onrender.com', 'localhost', '127.0.0.1']
 
 
@@ -127,10 +128,11 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://osagelom.onrender.com'
+    'https://osagelom.onrender.com',
+    'http://127.0.0.1'
 ]
 
 # Also ensure CSRF cookie settings are correct
-CSRF_COOKIE_SECURE = True  # Required for HTTPS
-CSRF_COOKIE_HTTPONLY = False  # Must be False so JS can read it[citation:9]
+CSRF_COOKIE_SECURE = not DEBUG  # True for HTTPS (production), False for HTTP (localhost)
+CSRF_COOKIE_HTTPONLY = False  # Must be False so JS can read it
 CSRF_COOKIE_SAMESITE = 'Lax'
