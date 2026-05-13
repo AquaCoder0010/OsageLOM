@@ -13,7 +13,6 @@ from typing import Tuple, Optional
 
 class ByteFormerConfig:
     """Configuration class for ByteFormer model sizes."""
-    
     MODES = {
         "tiny": {"embed_dim": 192, "n_layers": 12, "n_heads": 3, "ffn_dim": 768},
         "small": {"embed_dim": 384, "n_layers": 12, "n_heads": 6, "ffn_dim": 1536},
@@ -334,14 +333,15 @@ class ByteFormer(nn.Module):
         window_size: int = 128,
         window_shift: int = 64,
         dropout: float = 0.0
-    ):
+    ):        
         super().__init__()
         
+
         self.embed_dim = embed_dim
         self.vocab_size = vocab_size
         
         # Byte embedding layer
-        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=-1)
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=256)
         
         # Token reduction convolution
         self.token_reduction = TokenReduction(embed_dim, conv_kernel_size) if conv_kernel_size > 0 else None
@@ -399,14 +399,13 @@ class ByteFormer(nn.Module):
 #        
 #        return x, mask
 #
-    def get_backbone_inputs(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+    def get_backbone_inputs(self, x: Tensor) -> Tuple[Tensor, Tensor]:        
         # 1. Create initial mask based on indices before they are embedded
         mask = torch.zeros_like(x, dtype=torch.float)
-        mask[x == -1] = float("-inf")
+        mask[x == 256] = float("-inf")
         
         # 2. Embed the bytes
         x_indices = x.clone()
-        x_indices[x_indices == -1] = 0  
         x_embeds = self.embedding(x_indices) 
         
         # 3. Apply Token Reduction (Convolution)
@@ -456,7 +455,7 @@ class ByteFormer(nn.Module):
         
         # Pass through transformer layers
         for block in self.transformer:
-            x = block(x, mask)
+            x = block(x, mask) 
         
         x = self.norm(x)
         
