@@ -333,7 +333,8 @@ class ByteFormer(nn.Module):
         window_size: int = 128,
         window_shift: int = 64,
         dropout: float = 0.0
-    ):        
+    ):
+
         super().__init__()
         
 
