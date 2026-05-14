@@ -298,8 +298,8 @@ class TokenReduction(nn.Module):
 
     
     def forward(self, x: Tensor) -> Tensor:
-        # 99 % reduction in size.
-        return self.conv(self.conv(x.permute(0, 2, 1))).permute(0, 2, 1)
+        # 90 % reduction in size.
+        return self.conv(x.permute(0, 2, 1)).permute(0, 2, 1)
 
 
 class PositionalEmbedding(nn.Module):
@@ -374,73 +374,30 @@ class ByteFormer(nn.Module):
         """Initialize embedding weights."""
         nn.init.trunc_normal_(self.embedding.weight[:-1], std=math.sqrt(1.0 / self.embed_dim))
     
-#    def get_backbone_inputs(self, x: Tensor) -> Tuple[Tensor, Tensor]:
-#        """
-#        Convert input bytes to embeddings for the transformer.
-#        
-#        Args:
-#            x: Integer tensor [B, N] with byte values (0-255), -1 for padding
-#        
-#        Returns:
-#            Embeddings tensor and attention mask
-#        """
-#        mask = torch.zeros_like(x, dtype=torch.float)
-#        mask[x == -1] = float("-inf")
-#        
-#        x[x == -1] = 0  # Replace padding with embedding index 0
-#        x = self.embedding(x)
-#        
-#        # Apply token reduction
-#        if self.token_reduction is not None:
-#            x = self.token_reduction(x)
-#        
-#        # Add positional embeddings
-#        seq_len = x.shape[1]
-#        x = x + self.pos_embed(seq_len)
-#        
-#        return x, mask
-#
-    def get_backbone_inputs(self, x: Tensor) -> Tuple[Tensor, Tensor]:        
-        # 1. Create initial mask based on indices before they are embedded
+    def get_backbone_inputs(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+        """
+        Convert input bytes to embeddings for the transformer.
+        
+        Args:
+            x: Integer tensor [B, N] with byte values (0-255), -1 for padding
+        
+        Returns:
+            Embeddings tensor and attention mask
+        """
         mask = torch.zeros_like(x, dtype=torch.float)
         mask[x == 256] = float("-inf")
         
-        # 2. Embed the bytes
-        x_indices = x.clone()
-        x_embeds = self.embedding(x_indices) 
+        x = self.embedding(x)
         
-        # 3. Apply Token Reduction (Convolution)
+        # Apply token reduction
         if self.token_reduction is not None:
-            # Reduce the data
-            x_embeds = self.token_reduction(x_embeds)
-            
-            is_pad = (mask == float("-inf")).float().unsqueeze(1) # [B, 1, N]
-            
-            # FIRST POOL
-            is_pad_pooled = F.max_pool1d(
-                is_pad,
-                kernel_size=self.token_reduction.conv.kernel_size[0],
-                stride=self.token_reduction.conv.stride[0],
-                padding=self.token_reduction.conv.padding[0]
-            )
-            
-            # SECOND POOL (Added to match the double-conv in TokenReduction)
-            is_pad_pooled = F.max_pool1d(
-                is_pad_pooled,
-                kernel_size=self.token_reduction.conv.kernel_size[0],
-                stride=self.token_reduction.conv.stride[0],
-                padding=self.token_reduction.conv.padding[0]
-            ).squeeze(1) 
+            x = self.token_reduction(x)
         
-            # Overwrite the original mask variable
-            mask = torch.zeros_like(is_pad_pooled)
-            mask[is_pad_pooled > 0] = float("-inf")
-    
-        # 4. Add positional embeddings to the REDUCED sequence
-        seq_len = x_embeds.shape[1]
-        x_embeds = x_embeds + self.pos_embed(seq_len)
-    
-        return x_embeds, mask
+        # Add positional embeddings
+        seq_len = x.shape[1]
+        x = x + self.pos_embed(seq_len)
+        
+        return x, mask
 
     def forward(self, x: Tensor) -> Tensor:
         """
