@@ -1,26 +1,32 @@
 import os
 import tempfile
-from django.shortcuts import render
-from django.http import JsonResponse
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_POST
-from django.conf import settings
-
+from flask import Flask, render_template, request, jsonify
+from flask_wtf.csrf import CSRFProtect
 import pefile
 import torch
 from model_train.model import create_byteformer
+from model_train.dataset import BytesTransform_o
 
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
+
+csrf = CSRFProtect(app)
 
 MODEL = None
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'best_model_final.pth')
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_model_final.pth')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 
 
 def get_model():
     global MODEL
     if MODEL is None:
         model = create_byteformer(mode="tiny", num_classes=2, max_num_tokens=50000)
-        checkpoint = torch.load(os.path.join(BASE_DIR, 'best_model_final.pth'), map_location="cpu")
+        checkpoint = torch.load(MODEL_PATH, map_location="cpu")
         state_dict = checkpoint["model_state_dict"]
         model.load_state_dict(state_dict)
         model.eval()
@@ -51,15 +57,30 @@ def is_valid_pe(file_bytes: bytes) -> bool:
                 return False
     return True
 
-
 def predict(file_path: str):
     model = get_model()
     with open(file_path, "rb") as f:
         data = f.read()
-    executable_data = extract_executable_sections(data)
-    bytes_arr = torch.tensor(list(executable_data) + [256], dtype=torch.long).unsqueeze(0)
-    with torch.no_grad():
-        output = model(bytes_arr)
+    
+    def extract_opcode(file_content: bytes):
+        pe = pefile.PE(data=file_content)
+        executable_data = bytearray()
+        for section in pe.sections:
+            # 0x20000000 = IMAGE_SCN_MEM_EXECUTE
+            if section.Characteristics & 0x20000000:
+                executable_data.extend(section.get_data())
+
+        return executable_data;
+
+    execu = extract_opcode(data)
+    bytes_arr = torch.tensor(list(execu), dtype=torch.long).unsqueeze(0)
+    try:
+        with torch.no_grad():
+            output = model(bytes_arr)
+            print(f'Output: {output}')
+    except Exception as e:
+        print(f'Error: {type(e).__name__}: {e}')
+
     probabilities = torch.softmax(output, dim=1)
     confidence = probabilities[0][1].item()
     prediction = output.argmax(dim=1).item()
@@ -70,32 +91,51 @@ def predict(file_path: str):
         'label': 'MALWARE' if prediction == 1 else 'BENIGN'
     }
 
-@require_POST
-def scan_file(request):
-    uploaded_file = request.FILES.get('file')
-    if not uploaded_file:
-        return JsonResponse({'error': 'No file provided'}, status=400)
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+
+@app.route('/api/scan/', methods=['POST'])
+@csrf.exempt
+def scan_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    uploaded_file = request.files['file']
+    if uploaded_file.filename == '':
+        return jsonify({'error': 'No file provided'}), 400
+
     file_bytes = uploaded_file.read()
+
     if not is_valid_pe(file_bytes):
-        return JsonResponse({'error': 'Invalid PE file. Please upload a valid PE executable.'}, status=400)
+        return jsonify({'error': 'Invalid PE file. Please upload a valid PE executable.'}), 400
+
     with tempfile.NamedTemporaryFile(delete=False, suffix='.exe') as temp_file:
         temp_file.write(file_bytes)
         temp_path = temp_file.name
+
     try:
         result = predict(temp_path)
     except Exception as e:
         os.unlink(temp_path)
-        return JsonResponse({'error': f'Prediction failed: {str(e)}'}, status=500)
+        error_msg = 'Prediction failed: ' + str(e)
+        return jsonify({'error': error_msg}), 500
+
     os.unlink(temp_path)
-    return JsonResponse({
-        'filename': uploaded_file.name,
-        'size': uploaded_file.size,
+
+    return jsonify({
+        'filename': uploaded_file.filename,
+        'size': len(file_bytes),
         'is_malware': result['is_malware'],
         'confidence': round(result['confidence'], 4),
         'detection': result['label']
     })
 
 
-@ensure_csrf_cookie
-def home(request):
-    return render(request, 'scanner/index.html')
+if __name__ == '__main__':
+    get_model()
+    debug_mode = os.environ.get('DEBUG', 'False').lower() == 'true'
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
