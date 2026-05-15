@@ -5,8 +5,6 @@ from flask_wtf.csrf import CSRFProtect
 import pefile
 import torch
 from model_train.model import create_byteformer
-from model_train.dataset import BytesTransform_o
-
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
@@ -74,12 +72,8 @@ def predict(file_path: str):
 
     execu = extract_opcode(data)
     bytes_arr = torch.tensor(list(execu), dtype=torch.long).unsqueeze(0)
-    try:
-        with torch.no_grad():
-            output = model(bytes_arr)
-            print(f'Output: {output}')
-    except Exception as e:
-        print(f'Error: {type(e).__name__}: {e}')
+    with torch.no_grad():
+        output = model(bytes_arr)
 
     probabilities = torch.softmax(output, dim=1)
     confidence = probabilities[0][1].item()
