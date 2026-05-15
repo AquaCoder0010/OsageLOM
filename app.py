@@ -5,6 +5,8 @@ from flask_wtf.csrf import CSRFProtect
 import pefile
 import torch
 from model_train.model import create_byteformer
+import logging
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
