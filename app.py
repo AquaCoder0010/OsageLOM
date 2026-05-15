@@ -91,42 +91,65 @@ def home():
     return render_template('index.html')
 
 
+logger = logging.getLogger(__name__)
+
 @app.route('/api/scan/', methods=['POST'])
 @csrf.exempt
 def scan_file():
+    logger.info("=== Scan endpoint called ===")
+    
     if 'file' not in request.files:
+        logger.warning("No file in request")
         return jsonify({'error': 'No file provided'}), 400
 
     uploaded_file = request.files['file']
     if uploaded_file.filename == '':
+        logger.warning("Empty filename")
         return jsonify({'error': 'No file provided'}), 400
 
+    logger.info(f"Received file: {uploaded_file.filename}, size: {uploaded_file.content_length}")
+
     file_bytes = uploaded_file.read()
+    logger.info(f"Read {len(file_bytes)} bytes")
 
     if not is_valid_pe(file_bytes):
+        logger.warning("Invalid PE file")
         return jsonify({'error': 'Invalid PE file. Please upload a valid PE executable.'}), 400
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.exe') as temp_file:
-        temp_file.write(file_bytes)
-        temp_path = temp_file.name
-
+    temp_path = None
     try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.exe') as temp_file:
+            temp_file.write(file_bytes)
+            temp_path = temp_file.name
+        logger.info(f"Temp file created: {temp_path}")
+
+        # Log before prediction – measure time
+        import time
+        start = time.time()
         result = predict(temp_path)
+        elapsed = time.time() - start
+        logger.info(f"Prediction completed in {elapsed:.2f} seconds. Result: {result}")
+
     except Exception as e:
-        os.unlink(temp_path)
-        error_msg = 'Prediction failed: ' + str(e)
-        return jsonify({'error': error_msg}), 500
+        logger.exception("Prediction failed with exception:")  # logs full traceback
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+        return jsonify({'error': 'Prediction failed: ' + str(e)}), 500
 
-    os.unlink(temp_path)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+            logger.info(f"Temp file deleted: {temp_path}")
 
-    return jsonify({
+    response = jsonify({
         'filename': uploaded_file.filename,
         'size': len(file_bytes),
         'is_malware': result['is_malware'],
         'confidence': round(result['confidence'], 4),
         'detection': result['label']
     })
-
+    logger.info("Returning successful response")
+    return response
 
 if __name__ == '__main__':
     get_model()
