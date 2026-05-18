@@ -81,6 +81,57 @@ class BytesTransform:
         
         return byte_tensor.int()
 
+
+class BytesTransform_o:
+    """
+    Transform that loads raw byte data from text files.
+    
+    The dataset contains text files where each line contains space-separated
+    byte values (0-255), e.g., "23 156 89 255 0 34"
+    """
+    
+    def __init__(
+        self,
+        max_length: Optional[int] = None,
+        pad_value: int = 256
+    ):
+        """
+        Args:
+            max_length: Maximum sequence length (truncate if longer, pad if shorter)
+            pad_value: Value used for padding shorter sequences
+        """
+        self.max_length = max_length
+        self.pad_value = pad_value
+    
+    def __call__(self, filecontent) -> torch.Tensor:
+        """
+        Load byte data from a text file.
+        
+        Args:
+            filepath: Path to the text file containing byte values
+        
+        Returns:
+            Tensor of shape [seq_len] containing byte values as long
+        """
+        
+        # Parse space-separated byte values
+        byte_values = list(filecontent)
+        byte_tensor = torch.tensor(byte_values, dtype=torch.long)
+        
+        # Handle max_length
+        if self.max_length is not None:
+            seq_len = byte_tensor.shape[0]
+            
+            if seq_len > self.max_length:
+                # Truncate
+                byte_tensor = byte_tensor[:self.max_length]
+            elif seq_len < self.max_length:
+                # Pad
+                padding = torch.full((self.max_length - seq_len,), self.pad_value, dtype=torch.long)
+                byte_tensor = torch.cat([byte_tensor, padding])
+        
+        return byte_tensor
+    
 class ByteFormerDataset(Dataset):
     """
     Dataset that loads raw byte sequences from text files.
