@@ -36,7 +36,7 @@ def is_valid_pe(file_bytes: bytes) -> bool:
     return True
 
 def predict(file_path: str):
-    with open('file.exe', 'rb') as f:
+    with open(file_path, 'rb') as f:
         value = f.read()
 
     payload = { "bytes_sequence": list(value) }
