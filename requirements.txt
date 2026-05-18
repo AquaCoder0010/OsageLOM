@@ -4,3 +4,4 @@ Flask-WTF==1.3.0
 torch==2.12.0+cpu
 typing==3.7.4.3
 requests==2.33.1
+gunicorn==25.3.0
