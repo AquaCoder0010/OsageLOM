@@ -1,10 +1,12 @@
+import requests
 import os
 import tempfile
 from flask import Flask, render_template, request, jsonify
 from flask_wtf.csrf import CSRFProtect
-import pefile
 import torch
 from model_train.model import create_byteformer
+from model_train.dataset import BytesTransform_o
+
 import logging
 
 
@@ -13,35 +15,11 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 app.config['UPLOAD_FOLDER'] = tempfile.gettempdir()
 
+SPACE_URL = "https://AquaCoder0010-osagelom.hf.space/predict"
+
 csrf = CSRFProtect(app)
 
-MODEL = None
-MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_model_final.pth')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-
-
-def get_model():
-    global MODEL
-    if MODEL is None:
-        model = create_byteformer(mode="tiny", num_classes=2, max_num_tokens=50000)
-        checkpoint = torch.load(MODEL_PATH, map_location="cpu")
-        state_dict = checkpoint["model_state_dict"]
-        model.load_state_dict(state_dict)
-        model.eval()
-        MODEL = model
-    return MODEL
-
-
-def extract_executable_sections(data: bytes) -> bytearray:
-    pe = pefile.PE(data=data)
-    executable_data = bytearray()
-    for section in pe.sections:
-        if section.Characteristics & 0x20000000:
-            executable_data.extend(section.get_data())
-    return executable_data
-
 
 def is_valid_pe(file_bytes: bytes) -> bool:
     if len(file_bytes) < 2:
@@ -58,34 +36,17 @@ def is_valid_pe(file_bytes: bytes) -> bool:
     return True
 
 def predict(file_path: str):
-    model = get_model()
-    with open(file_path, "rb") as f:
-        data = f.read()
+    with open('file.exe', 'rb') as f:
+        value = f.read()
+
+    payload = { "bytes_sequence": list(value) }
+    result  = requests.post(SPACE_URL, json=payload).json()
     
-    def extract_opcode(file_content: bytes):
-        pe = pefile.PE(data=file_content)
-        executable_data = bytearray()
-        for section in pe.sections:
-            # 0x20000000 = IMAGE_SCN_MEM_EXECUTE
-            if section.Characteristics & 0x20000000:
-                executable_data.extend(section.get_data())
+    prediction = result['predicted_class']
+    confidence = result['confidence']
 
-        return executable_data;
-
-    execu = extract_opcode(data)
-    bytes_arr = torch.tensor(list(execu), dtype=torch.long).unsqueeze(0)
-    with torch.no_grad():
-        output = model(bytes_arr)
-
-    probabilities = torch.softmax(output, dim=1)
-    confidence = probabilities[0][1].item()
-    prediction = output.argmax(dim=1).item()
-    return {
-        'prediction': prediction,
-        'confidence': confidence,
-        'is_malware': prediction == 1,
-        'label': 'MALWARE' if prediction == 1 else 'BENIGN'
-    }
+    print(confidence)
+    return { 'prediction': prediction, 'confidence': confidence, 'is_malware': prediction == 1, 'label': 'MALWARE' if prediction == 1 else 'BENIGN'}
 
 
 @app.route('/')
@@ -154,7 +115,6 @@ def scan_file():
     return response
 
 if __name__ == '__main__':
-    get_model()
     debug_mode = os.environ.get('DEBUG', 'False').lower() == 'true'
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=debug_mode, host='0.0.0.0', port=port)
